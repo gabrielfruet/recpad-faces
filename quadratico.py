@@ -1,14 +1,3 @@
-"""
-Quadratico classifier implementation in Python with optimized testing phase
-Classifier based on Mahalanobis distance to class centroids, using class-specific covariance matrices
-Returns:
-    STATS: List[float] -- [mean, std, median, min, max] of accuracy over Nr repetitions
-    TX_OK: np.ndarray -- List of accuracy rates for each run
-    X: np.ndarray -- Normalized feature matrix used
-    m: List[List[np.ndarray]] -- List of class centroids per repetition
-    S: List[List[np.ndarray]] -- List of class covariance matrices per repetition
-    posto: List[List[int]] -- List of ranks of covariance matrices per repetition
-"""
 
 import numpy as np
 import logging
@@ -34,7 +23,7 @@ def estatisticas_classes(Xtrn, Ytrn, C):
 
     return M, S_k, posto_k
 
-def mahalanobis_distance(X, means, inv_covs):
+def mahalanobis_distance(X, means, inv_covs) -> np.ndarray:
     """
     Vectorized Mahalanobis distance calculation for multiple samples and classes
 
@@ -76,6 +65,17 @@ def quadratico(
     Nr: int,
     Ptrain: int
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, List[List[np.ndarray]], List[List[np.ndarray]], List[List[int]]]:
+    """
+    Quadratico classifier implementation in Python with optimized testing phase
+    Classifier based on Mahalanobis distance to class centroids, using class-specific covariance matrices
+    Returns:
+        STATS: List[float] -- [mean, std, median, min, max] of accuracy over Nr repetitions
+        TX_OK: np.ndarray -- List of accuracy rates for each run
+        X: np.ndarray -- Normalized feature matrix used
+        m: List[List[np.ndarray]] -- List of class centroids per repetition
+        S: List[List[np.ndarray]] -- List of class covariance matrices per repetition
+        posto: List[List[int]] -- List of ranks of covariance matrices per repetition
+    """
     X = D[:, :-1].copy()
     Y = D[:, -1].astype(int).copy()
     Nrep = Nr
