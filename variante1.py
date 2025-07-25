@@ -1,72 +1,19 @@
-
+from quadratico import mahalanobis_distance, estatisticas_classes
+import time
+from typing import List, Tuple
 import numpy as np
 import logging
-from typing import List, Tuple
-import time
 
 log = logging.getLogger(__name__)
 
-def estatisticas_classes(Xtrn, Ytrn, C):
-    F = Xtrn.shape[1]  # Number of features
-    M = np.zeros((C, F))
-    S_k = np.zeros((C, F, F))
-    posto_k = np.zeros(C)
-    for k in range(1, C + 1):
-        Ic = np.where(Ytrn == k)[0]
-        Xc = Xtrn[Ic]
-        mu_k = np.mean(Xc, axis=0)
-        cov_k = np.cov(Xc.T)
-        rank_k = np.linalg.matrix_rank(cov_k)
-        M[k-1] = mu_k
-        S_k[k-1] = cov_k
-        posto_k[k-1] = (rank_k)
-
-    return M, S_k, posto_k
-
-def mahalanobis_distance(X, means, inv_covs) -> np.ndarray:
-    """
-    Vectorized Mahalanobis distance calculation for multiple samples and classes
-
-    Parameters:
-    -----------
-    X : numpy.ndarray, shape (n_samples, n_features)
-        Test samples
-    means : numpy.ndarray, shape (n_classes, n_features)
-        Class centroids
-    inv_covs : numpy.ndarray, shape (n_classes, n_features, n_features)
-        Inverse covariance matrices for each class
-
-    Returns:
-    --------
-    distances : numpy.ndarray, shape (n_samples, n_classes)
-        Mahalanobis distances from each sample to each class centroid
-    """
-    n_samples, n_features = X.shape
-    n_classes = means.shape[0]
-
-    # Initialize distances matrix
-    distances = np.zeros((n_samples, n_classes))
-
-    # Compute distances for each class
-    for k in range(n_classes):
-        # Difference between samples and class mean
-        # (n_samples, n_features)
-        diff = X - means[k]
-
-        # Compute Mahalanobis distance
-        # (x-μ)ᵀΣ⁻¹(x-μ) for each sample
-        mahal_term = np.einsum('ij,jk,ik->i', diff, inv_covs[k], diff)
-        distances[:, k] = np.sqrt(mahal_term)
-
-    return distances
-
-def quadratico(
+def variante1(
     D: np.ndarray,
     Nr: int,
-    Ptrain: int
+    Ptrain: int,
+    λ: float,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
-    Quadratico classifier implementation in Python with optimized testing phase
+    Quadratico variante 1 classifier implementation in Python with optimized testing phase
     Classifier based on Mahalanobis distance to class centroids, using class-specific covariance matrices
     Returns:
         STATS: List[float] -- [mean, std, median, min, max] of accuracy over Nr repetitions
@@ -131,11 +78,12 @@ def quadratico(
         failed_inversions = 0
         for k in range(C):
             try:
-                inv_covs[k] = np.linalg.inv(S_k[k])
+                # regularization
+                inv_covs[k] = np.linalg.inv(S_k[k] + λ*np.eye(S_k.shape[1]))
             except np.linalg.LinAlgError:
                 failed_inversions += 1
                 log.debug(f"Covariance matrix for class {k + 1} is singular, using pseudo-inverse.")
-                inv_covs[k] = np.linalg.pinv(S_k[k])
+                inv_covs[k] = np.linalg.pinv(S_k[k] + λ*np.eye(S_k.shape[1]))
 
         log.info(f"Percentage of failed inversions: {100*failed_inversions/C}%")
 
