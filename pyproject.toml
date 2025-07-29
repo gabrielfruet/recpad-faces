@@ -3,13 +3,13 @@ name = "faces"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = "<3.10"
+requires-python = ">=3.10"
 dependencies = [
     "matplotlib>=2.2.5",
-    "numba>=0.47.0",
     "numpy>=1.12.1",
     "opencv-python>=4.2.0.34",
     "pillow>=4.3.0",
+    "rich>=14.1.0",
     "scipy>=0.19.1",
 ]
 

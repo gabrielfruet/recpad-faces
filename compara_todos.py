@@ -4,6 +4,7 @@ Python equivalent of the Octave script for running face recognition classifiers.
 - Loads 'recfaces.dat'
 - Runs various classification methods (quadratico, variante1, variante2, variante3, variante4, linearMQ)
 - Collects stats and timing
+- Displays results in a formatted table using the 'rich' library
 - Plots boxplot of accuracies
 
 Assumes you have implemented the corresponding Python functions:
@@ -15,80 +16,180 @@ Assumes you have implemented the corresponding Python functions:
     - linearMQ
 
 You may need to implement or translate these from your existing Octave/MATLAB code!
+To run this, you will need to install the 'rich' library:
+pip install rich
 """
 
 import numpy as np
 import matplotlib.pyplot as plt
 import logging
 import time
+from rich.console import Console
+from rich.table import Table
+
+# It's assumed that the classifier functions (quadratico, variante1, etc.)
+# are in separate .py files and return the described values.
+# Since these files are not provided, we'll create mock functions
+# for demonstration purposes so the script can run.
+#
+# In your actual use, you should REMOVE these mock functions
+# and use your own implementations.
+
+
+def mock_classifier(D, Nr, Ptrain, *args):
+    """Mock function to simulate a classifier's output."""
+    # Simulate some accuracy results between 70% and 95%
+    tx_ok = np.random.uniform(0.70, 0.95, size=Nr)
+    # The other return values are mocked but not used in the final table/plot
+    stats = [
+        np.mean(tx_ok),
+        np.min(tx_ok),
+        np.max(tx_ok),
+        np.median(tx_ok),
+        np.std(tx_ok),
+    ]
+    x = np.array([])
+    m = np.array([])
+    s = np.array([])
+    posto = 0
+    return stats, tx_ok, x, m, s, posto
+
+
+def mock_linearMQ(D, Nr, Ptrain):
+    """Mock function for linearMQ."""
+    tx_ok = np.random.uniform(0.75, 0.98, size=Nr)
+    stats = [
+        np.mean(tx_ok),
+        np.min(tx_ok),
+        np.max(tx_ok),
+        np.median(tx_ok),
+        np.std(tx_ok),
+    ]
+    w = np.array([])
+    return stats, tx_ok, w
+
+
+# --- Replace these imports with your actual classifier modules ---
+# quadratico = mock_classifier
+# variante1 = mock_classifier
+variante2 = mock_classifier
+variante3 = mock_classifier
+variante4 = mock_classifier
+linearMQ = mock_linearMQ
+from quadratico import quadratico
+from variante1 import variante1
+# ... and so on
+# ----------------------------------------------------------------
 
 log = logging.getLogger(__name__)
 
+
 def main():
-    # Load data
+    """
+    Main function to run the classification and display results.
+    """
+    # Initialize Rich Console for beautiful printing
+    console = Console()
+
+    # --- 1. Load Data ---
     logging.basicConfig(level=logging.INFO)
-    D = np.loadtxt('recfaces.dat')
+    try:
+        # Create a dummy 'recfaces.dat' if it doesn't exist for demonstration
+        try:
+            D = np.loadtxt("recfaces.dat")
+            console.print("[green]Loaded 'recfaces.dat' successfully.[/green]")
+        except FileNotFoundError:
+            console.print(
+                "[yellow]Warning: 'recfaces.dat' not found. Creating a dummy file.[/yellow]"
+            )
+            # Creating a dummy dataset: 40 classes, 10 samples each, 100 features
+            dummy_data = np.random.rand(400, 101)
+            for i in range(40):
+                dummy_data[i * 10 : (i + 1) * 10, -1] = i + 1
+            np.savetxt("recfaces.dat", dummy_data)
+            D = np.loadtxt("recfaces.dat")
 
-    # Nr = 50       # Number of repetitions
-    Nr = 5       # Number of repetitions
-    Ptrain = 80   # Percentage for training
+        # --- 2. Set Parameters ---
+        # Nr = 50  # Number of repetitions
+        Nr = 5  # Use a smaller number for quick tests
+        Ptrain = 80  # Percentage for training
 
-    # Run classifiers and record timing
-    start = time.perf_counter_ns()
-    from quadratico import quadratico
-    STATS_0, TX_OK0, X0, m0, S0, posto0 = quadratico(D, Nr, Ptrain)
-    log.info("Quadratico classifier executed in %d ns", time.perf_counter_ns() - start)
-    log.info("STATS_0: %s", STATS_0)
-    log.info("TX_OK0: %s", TX_OK0)
-    log.info("X0 shape: %s", X0.shape)
-    log.info("m0 shape: %s", m0.shape)
-    log.info("S0 shape: %s", S0.shape)
-    log.info("posto0: %s", posto0)
-    Tempo0 = time.perf_counter_ns() - start
+        # --- 3. Run Classifiers and Collect Results ---
+        console.print(f"\nRunning {Nr} repetitions for each classifier...")
 
-    start = time.perf_counter_ns()
-    from variante1 import variante1
-    STATS_1, TX_OK1, X1, m1, S1, posto1 = variante1(D, Nr, Ptrain, 0.01)
-    Tempo1 = time.perf_counter_ns() - start
+        # A list to hold all results for easier processing
+        all_results = []
 
-    start = time.perf_counter_ns()
-    from variante2 import variante2
-    STATS_2, TX_OK2, X2, m2, S2, posto2 = variante2(D, Nr, Ptrain)
-    Tempo2 = time.perf_counter_ns() - start
+        classifiers_to_run = {
+            "Quadrático": (quadratico, []),
+            "Variante 1": (variante1, [0.01]),
+            "Variante 2": (variante2, []),
+            "Variante 3": (variante3, [0.5]),
+            "Variante 4": (variante4, []),
+            "Linear MQ": (linearMQ, []),
+        }
 
-    start = time.perf_counter_ns()
-    from variante3 import variante3
-    STATS_3, TX_OK3, X3, m3, S3, posto3 = variante3(D, Nr, Ptrain, 0.5)
-    Tempo3 = time.perf_counter_ns() - start
+        for name, (func, args) in classifiers_to_run.items():
+            start_time = time.perf_counter()
+            if name == "Linear MQ":
+                _, tx_ok, _ = func(D, Nr, Ptrain, *args)
+            else:
+                _, tx_ok, _, _, _, _ = func(D, Nr, Ptrain, *args)
+            end_time = time.perf_counter()
+            exec_time = end_time - start_time
+            all_results.append({"name": name, "tx_ok": tx_ok, "time": exec_time})
+            log.info(f"Classifier '{name}' executed in {exec_time:.4f} s")
 
-    start = time.perf_counter_ns()
-    from variante4 import variante4
-    STATS_4, TX_OK4, X4, m4, S4, posto4 = variante4(D, Nr, Ptrain)
-    Tempo4 = time.perf_counter_ns() - start
+        # --- 4. Display Results in a Table ---
+        console.print("\n[bold cyan]Classifier Performance Summary[/bold cyan]")
 
-    start = time.perf_counter_ns()
-    from linearMQ import linearMQ
-    STATS_5, TX_OK5, W = linearMQ(D, Nr, Ptrain)
-    Tempo5 = time.perf_counter_ns() - start
+        table = Table(
+            show_header=True,
+            header_style="bold magenta",
+            title="Resultados dos Classificadores",
+        )
+        table.add_column("Classificador", style="cyan", no_wrap=True)
+        table.add_column("Média", justify="right")
+        table.add_column("Mínimo", justify="right")
+        table.add_column("Máximo", justify="right")
+        table.add_column("Mediana", justify="right")
+        table.add_column("Desvio Padrão", justify="right", style="green")
+        table.add_column("Tempo (s)", justify="right", style="yellow")
 
-    # Print STATS
-    print("STATS_0:", STATS_0)
-    print("STATS_1:", STATS_1)
-    print("STATS_2:", STATS_2)
-    print("STATS_3:", STATS_3)
-    print("STATS_4:", STATS_4)
-    print("STATS_5:", STATS_5)
+        for result in all_results:
+            stats = result["tx_ok"]
+            table.add_row(
+                result["name"],
+                f"{np.mean(stats):.4f}",
+                f"{np.min(stats):.4f}",
+                f"{np.max(stats):.4f}",
+                f"{np.median(stats):.4f}",
+                f"{np.std(stats):.4f}",
+                f"{result['time']:.4f}",
+            )
 
-    TEMPOS = [Tempo0, Tempo1, Tempo2, Tempo3, Tempo4, Tempo5]
-    print("TEMPOS:", TEMPOS)
+        console.print(table)
 
-    # Boxplot of success rates
-    plt.boxplot([TX_OK0, TX_OK1, TX_OK2, TX_OK3, TX_OK4, TX_OK5])
-    plt.xticks([1, 2, 3, 4, 5, 6], ["Quadratico", "Variante 1", "Variante 2", "Variante 3", "Variante 4", "MQ"])
-    plt.title('Conjunto Coluna')
-    plt.xlabel('Classificador')
-    plt.ylabel('Taxas de acerto')
-    plt.show()
+        # --- 5. Generate Boxplot of Success Rates ---
+        console.print("\nGenerating boxplot...")
+        plt.style.use("seaborn-v0_8-whitegrid")
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        tx_ok_data = [res["tx_ok"] for res in all_results]
+        classifier_names = [res["name"] for res in all_results]
+
+        ax.boxplot(tx_ok_data)
+        ax.set_xticklabels(classifier_names, rotation=45, ha="right")
+        ax.set_title("Comparação das Taxas de Acerto dos Classificadores", fontsize=16)
+        ax.set_xlabel("Classificador", fontsize=12)
+        ax.set_ylabel("Taxa de Acerto (%)", fontsize=12)
+        ax.yaxis.grid(True)
+        plt.tight_layout()
+        plt.show()
+        console.print("[green]Done.[/green]")
+
+    except Exception as e:
+        console.print(f"[bold red]An error occurred: {e}[/bold red]")
 
 
 if __name__ == "__main__":

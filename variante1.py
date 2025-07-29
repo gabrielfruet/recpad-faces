@@ -6,6 +6,7 @@ import logging
 
 log = logging.getLogger(__name__)
 
+
 def variante1(
     D: np.ndarray,
     Nr: int,
@@ -59,7 +60,9 @@ def variante1(
         tic = time.perf_counter_ns()
         M, S_k, posto_k = estatisticas_classes(Xtrn, Ytrn, C)
         toc = time.perf_counter_ns()
-        log.info(f"Time for calculating centroids and covariance matrices: {(toc - tic) / 1e6:.2f} ms")
+        log.info(
+            f"Time for calculating centroids and covariance matrices: {(toc - tic) / 1e6:.2f} ms"
+        )
 
         m.append(M)
         S.append(S_k)
@@ -79,13 +82,15 @@ def variante1(
         for k in range(C):
             try:
                 # regularization
-                inv_covs[k] = np.linalg.inv(S_k[k] + λ*np.eye(S_k.shape[1]))
+                inv_covs[k] = np.linalg.inv(S_k[k] + λ * np.eye(S_k.shape[1]))
             except np.linalg.LinAlgError:
                 failed_inversions += 1
-                log.debug(f"Covariance matrix for class {k + 1} is singular, using pseudo-inverse.")
-                inv_covs[k] = np.linalg.pinv(S_k[k] + λ*np.eye(S_k.shape[1]))
+                log.debug(
+                    f"Covariance matrix for class {k + 1} is singular, using pseudo-inverse."
+                )
+                inv_covs[k] = np.linalg.pinv(S_k[k] + λ * np.eye(S_k.shape[1]))
 
-        log.info(f"Percentage of failed inversions: {100*failed_inversions/C}%")
+        log.info(f"Percentage of failed inversions: {100 * failed_inversions / C}%")
 
         # Calculate all distances at once
         distances = mahalanobis_distance(Xtst, M, inv_covs)
@@ -101,7 +106,9 @@ def variante1(
         Pacerto.append(100 * acerto / Ntst)
 
     TX_OK = np.array(Pacerto)
-    STATS = np.array([np.mean(TX_OK), np.std(TX_OK), np.median(TX_OK), np.min(TX_OK), np.max(TX_OK)])
+    STATS = np.array(
+        [np.mean(TX_OK), np.std(TX_OK), np.median(TX_OK), np.min(TX_OK), np.max(TX_OK)]
+    )
     m = np.array(m)
     S = np.array(S)
     posto = np.array(posto)

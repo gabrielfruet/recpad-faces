@@ -1,10 +1,10 @@
-
 import numpy as np
 import logging
 from typing import List, Tuple
 import time
 
 log = logging.getLogger(__name__)
+
 
 def estatisticas_classes(Xtrn, Ytrn, C):
     F = Xtrn.shape[1]  # Number of features
@@ -17,11 +17,12 @@ def estatisticas_classes(Xtrn, Ytrn, C):
         mu_k = np.mean(Xc, axis=0)
         cov_k = np.cov(Xc.T)
         rank_k = np.linalg.matrix_rank(cov_k)
-        M[k-1] = mu_k
-        S_k[k-1] = cov_k
-        posto_k[k-1] = (rank_k)
+        M[k - 1] = mu_k
+        S_k[k - 1] = cov_k
+        posto_k[k - 1] = rank_k
 
     return M, S_k, posto_k
+
 
 def mahalanobis_distance(X, means, inv_covs) -> np.ndarray:
     """
@@ -55,15 +56,14 @@ def mahalanobis_distance(X, means, inv_covs) -> np.ndarray:
 
         # Compute Mahalanobis distance
         # (x-μ)ᵀΣ⁻¹(x-μ) for each sample
-        mahal_term = np.einsum('ij,jk,ik->i', diff, inv_covs[k], diff)
+        mahal_term = np.einsum("ij,jk,ik->i", diff, inv_covs[k], diff)
         distances[:, k] = np.sqrt(mahal_term)
 
     return distances
 
+
 def quadratico(
-    D: np.ndarray,
-    Nr: int,
-    Ptrain: int
+    D: np.ndarray, Nr: int, Ptrain: int
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Quadratico classifier implementation in Python with optimized testing phase
@@ -112,7 +112,9 @@ def quadratico(
         tic = time.perf_counter_ns()
         M, S_k, posto_k = estatisticas_classes(Xtrn, Ytrn, C)
         toc = time.perf_counter_ns()
-        log.info(f"Time for calculating centroids and covariance matrices: {(toc - tic) / 1e6:.2f} ms")
+        log.info(
+            f"Time for calculating centroids and covariance matrices: {(toc - tic) / 1e6:.2f} ms"
+        )
 
         m.append(M)
         S.append(S_k)
@@ -134,10 +136,12 @@ def quadratico(
                 inv_covs[k] = np.linalg.inv(S_k[k])
             except np.linalg.LinAlgError:
                 failed_inversions += 1
-                log.debug(f"Covariance matrix for class {k + 1} is singular, using pseudo-inverse.")
+                log.debug(
+                    f"Covariance matrix for class {k + 1} is singular, using pseudo-inverse."
+                )
                 inv_covs[k] = np.linalg.pinv(S_k[k])
 
-        log.info(f"Percentage of failed inversions: {100*failed_inversions/C}%")
+        log.info(f"Percentage of failed inversions: {100 * failed_inversions / C}%")
 
         # Calculate all distances at once
         distances = mahalanobis_distance(Xtst, M, inv_covs)
@@ -153,7 +157,9 @@ def quadratico(
         Pacerto.append(100 * acerto / Ntst)
 
     TX_OK = np.array(Pacerto)
-    STATS = np.array([np.mean(TX_OK), np.std(TX_OK), np.median(TX_OK), np.min(TX_OK), np.max(TX_OK)])
+    STATS = np.array(
+        [np.mean(TX_OK), np.std(TX_OK), np.median(TX_OK), np.min(TX_OK), np.max(TX_OK)]
+    )
     m = np.array(m)
     S = np.array(S)
     posto = np.array(posto)

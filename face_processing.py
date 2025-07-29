@@ -13,11 +13,25 @@ import cv2
 import os
 import argparse
 
-parser = argparse.ArgumentParser(description="Process face images and convert to column vectors.")
+parser = argparse.ArgumentParser(
+    description="Process face images and convert to column vectors."
+)
 
-parser.add_argument('--input_dir', type=Path, required=True, help='Directory containing face images')
-parser.add_argument('--output_file', type=Path, default='recfaces.dat', help='Output file name for processed data')
-parser.add_argument('--resize', type=int, default=30, help='Resize images to this dimension (default: 30x30)')
+parser.add_argument(
+    "--input_dir", type=Path, required=True, help="Directory containing face images"
+)
+parser.add_argument(
+    "--output_file",
+    type=Path,
+    default="recfaces.dat",
+    help="Output file name for processed data",
+)
+parser.add_argument(
+    "--resize",
+    type=int,
+    default=30,
+    help="Resize images to this dimension (default: 30x30)",
+)
 
 args = parser.parse_args()
 
@@ -26,25 +40,36 @@ output_file = args.output_file
 resize_size: int = args.resize
 
 # Phase 1 -- Load available images
-part1 = 'subject0'
-part2 = 'subject'
-part3 = ['.centerlight', '.glasses', '.happy', '.leftlight', '.noglasses', '.normal',
-         '.rightlight', '.sad', '.sleepy', '.surprised', '.wink']
+part1 = "subject0"
+part2 = "subject"
+part3 = [
+    ".centerlight",
+    ".glasses",
+    ".happy",
+    ".leftlight",
+    ".noglasses",
+    ".normal",
+    ".rightlight",
+    ".sad",
+    ".sleepy",
+    ".surprised",
+    ".wink",
+]
 
-Nind = 15      # Number of individuals (classes)
+Nind = 15  # Number of individuals (classes)
 Nexp = len(part3)  # Number of expressions
 
-X = []    # Accumulate vectorized images
-Y = []    # Accumulate label (individual identifier)
-NAME = [] # Accumulate filenames
+X = []  # Accumulate vectorized images
+Y = []  # Accumulate label (individual identifier)
+NAME = []  # Accumulate filenames
 
 for i in range(1, Nind + 1):  # Index for individuals
     individuo = i
-    for j in range(Nexp):     # Index for expressions
+    for j in range(Nexp):  # Index for expressions
         if i < 10:
-            nome = input_dir/f"{part1}{i}{part3[j]}"
+            nome = input_dir / f"{part1}{i}{part3[j]}"
         else:
-            nome = input_dir/f"{part2}{i}{part3[j]}"
+            nome = input_dir / f"{part2}{i}{part3[j]}"
 
         # Append file extension if needed (assume .pgm; change if necessary)
         filename = nome
@@ -56,7 +81,7 @@ for i in range(1, Nind + 1):  # Index for individuals
             continue
 
         Img = Image.open(filename)
-        Img = Img.convert('L')
+        Img = Img.convert("L")
 
         if Img is None:
             print(f"Warning: Unable to read image: {filename}")
@@ -74,7 +99,7 @@ for i in range(1, Nind + 1):  # Index for individuals
         A = An.astype(np.float64) / 255.0
 
         # Vectorization: stack columns
-        a = A.flatten(order='F')  # Fortran order = column stacking
+        a = A.flatten(order="F")  # Fortran order = column stacking
 
         # Label = individual index
         ROT = i
@@ -97,9 +122,8 @@ Z = np.vstack([X, Y])
 Z = Z.T  # Each row: attributes + label
 
 # Save to ASCII file ("recfaces.dat")
-np.savetxt("recfaces.dat", Z, fmt='%.6f')
+np.savetxt("recfaces.dat", Z, fmt="%.6f")
 
 # Optionally, save X and Y separately as in original commented code
 # np.savetxt("yale1_input20x20.txt", X, fmt='%.6f')
 # np.savetxt("yale1_output20x20.txt", Y, fmt='%d')
-
