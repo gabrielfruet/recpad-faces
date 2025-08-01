@@ -32,6 +32,7 @@ from rich.table import Table
 from rich.logging import RichHandler
 from functools import partial
 from quadratico import (
+    NormalizationMethods,
     quadratico,
     classificador_1nn,
     classificador_dmc,
@@ -125,6 +126,20 @@ def main():
         help="Name of the experiment (used for CSV export)",
     )
 
+    parser.add_argument(
+        "-n",
+        default=5,
+        type=int,
+        help="Number of repetitions for each classifier (default: 5)",
+    )
+
+    parser.add_argument(
+        "--normalization_method",
+        default="z_score",
+        choices=[norm.value for norm in NormalizationMethods],
+        help="Normalization method to use (default: z_score)",
+    )
+
     args = parser.parse_args()
 
     # --- 1. Load Data ---
@@ -135,11 +150,11 @@ def main():
     if not args.data.exists():
         log.error(f"File '{args.data}' not found")
     D = np.loadtxt(args.data)
-    console.print("[green]Loaded 'recfaces.dat' successfully.[/green]")
+    console.print(f"[green]Loaded '{args.data}' successfully.[/green]")
 
     # --- 2. Set Parameters ---
     # Nr = 50  # Number of repetitions
-    Nr = 5  # Use a smaller number for quick tests
+    Nr = args.n  # Use a smaller number for quick tests
     Ptrain = 80  # Percentage for training
 
     # --- 3. Run Classifiers and Collect Results ---
@@ -159,9 +174,9 @@ def main():
         "Máxima Correlação": (classificador_maxcorr, []),
     }
 
-    for name, (func, args) in classifiers_to_run.items():
+    for name, (func, func_args) in classifiers_to_run.items():
         start_time = time.perf_counter()
-        result = func(D, Nr, Ptrain, *args)
+        result = func(D, Nr, Ptrain, *func_args)
         P_failed_inversions = None
         try:
             _, tx_ok, _, _, _, _, P_failed_inversions = result
@@ -211,12 +226,12 @@ def main():
             f"{np.median(stats):.4f}",
             f"{np.std(stats):.4f}",
             f"{result['time']:.4f}",
-            f"{np.mean(failed_inv) if len(failed_inv) > 0 else 'N/A':.4f}",
+            f"{np.mean(failed_inv) if failed_inv is not None and len(failed_inv) > 0 else 'N/A'}",
         )
 
     console.print(table)
 
-    csv_filename = f"{args.experiment}.csv"
+    csv_filename = f"results/{args.experiment}.csv"
     with open(csv_filename, "w", newline="") as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(
@@ -243,28 +258,28 @@ def main():
                     f"{np.median(stats):.4f}",
                     f"{np.std(stats):.4f}",
                     f"{result['time']:.4f}",
-                    f"{np.mean(failed_inv) if len(failed_inv) > 0 else 'N/A':.4f}",
+                    f"{np.mean(failed_inv) if failed_inv is not None and len(failed_inv) > 0 else 'N/A'}",
                 ]
             )
     console.print(f"[green]Results exported to {csv_filename}[/green]")
 
     # --- 5. Generate Boxplot of Success Rates ---
-    console.print("\nGenerating boxplot...")
-    plt.style.use("seaborn-v0_8-whitegrid")
-    fig, ax = plt.subplots(figsize=(10, 6))
-
-    tx_ok_data = [res["tx_ok"] for res in all_results]
-    classifier_names = [res["name"] for res in all_results]
-
-    ax.boxplot(tx_ok_data)
-    ax.set_xticklabels(classifier_names, rotation=45, ha="right")
-    ax.set_title("Comparação das Taxas de Acerto dos Classificadores", fontsize=16)
-    ax.set_xlabel("Classificador", fontsize=12)
-    ax.set_ylabel("Taxa de Acerto (%)", fontsize=12)
-    ax.yaxis.grid(True)
-    plt.tight_layout()
-    plt.show()
-    console.print("[green]Done.[/green]")
+    # console.print("\nGenerating boxplot...")
+    # plt.style.use("seaborn-v0_8-whitegrid")
+    # fig, ax = plt.subplots(figsize=(10, 6))
+    #
+    # tx_ok_data = [res["tx_ok"] for res in all_results]
+    # classifier_names = [res["name"] for res in all_results]
+    #
+    # ax.boxplot(tx_ok_data)
+    # ax.set_xticklabels(classifier_names, rotation=45, ha="right")
+    # ax.set_title("Comparação das Taxas de Acerto dos Classificadores", fontsize=16)
+    # ax.set_xlabel("Classificador", fontsize=12)
+    # ax.set_ylabel("Taxa de Acerto (%)", fontsize=12)
+    # ax.yaxis.grid(True)
+    # plt.tight_layout()
+    # plt.show()
+    # console.print("[green]Done.[/green]")
 
 
 if __name__ == "__main__":

@@ -127,15 +127,6 @@ for i in range(1, Nind + 1):  # Index for individuals
 X = np.array(X).T  # Each image is a column in X
 Y = np.array(Y).reshape(1, -1)  # Y is a row vector
 
-
-def box_cox(data, λ):
-    return np.where(data > 0, (data**λ - 1) / λ, 0)
-
-
-def log_likelihood(X, μ, σ):
-    return -0.5 * np.sum(np.log(2 * np.pi * σ**2) + ((X - μ) ** 2) / (2 * σ**2))
-
-
 if args.box_cox:
     from scipy.stats import boxcox
 

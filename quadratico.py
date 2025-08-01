@@ -15,6 +15,28 @@ class QdaMethods(Enum):
     TIKHONOV = "tikhonov"
 
 
+class NormalizationMethods(Enum):
+    Z_SCORE = "z_score"
+    NO_NORMALIZATION = "none"
+    SCALE_CHANGE = "scale_change"
+
+
+def normalize(
+    X: np.ndarray, method: NormalizationMethods = NormalizationMethods.Z_SCORE
+):
+    if method is NormalizationMethods.Z_SCORE:
+        med = np.mean(X, axis=1, keepdims=True)
+        dp = np.std(X, axis=1, keepdims=True)
+        X = (X - med) / dp
+    elif method is NormalizationMethods.SCALE_CHANGE:
+        X = (X - X.min()) / np.ptp(X)
+        X = (X - 0.5) * 2
+    elif method is NormalizationMethods.NO_NORMALIZATION:
+        pass
+
+    return X
+
+
 def estatisticas_classes(
     Xtrn, Ytrn, C, method: QdaMethods = QdaMethods.DEFAULT, **kwargs
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -228,7 +250,10 @@ def quadratico(
 
 
 def classificador_1nn(
-    D: np.ndarray, Nr: int, Ptrain: int
+    D: np.ndarray,
+    Nr: int,
+    Ptrain: int,
+    method: NormalizationMethods = NormalizationMethods.Z_SCORE,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     1-Nearest Neighbor classifier.
@@ -240,9 +265,7 @@ def classificador_1nn(
     Ptrn = Ptrain / 100.0
 
     # Z-score normalization
-    med = np.mean(X, axis=1, keepdims=True)
-    dp = np.std(X, axis=1, keepdims=True)
-    X = (X - med) / dp
+    X = normalize(X, method)
 
     N = len(Y)
     Ntrn = int(np.floor(Ptrn * N))
@@ -275,7 +298,10 @@ def classificador_1nn(
 
 
 def classificador_maxcorr(
-    D: np.ndarray, Nr: int, Ptrain: int
+    D: np.ndarray,
+    Nr: int,
+    Ptrain: int,
+    method: NormalizationMethods = NormalizationMethods.Z_SCORE,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Maximum correlation classifier.
@@ -287,9 +313,7 @@ def classificador_maxcorr(
     Nrep = Nr
     Ptrn = Ptrain / 100.0
 
-    med = np.mean(X, axis=1, keepdims=True)
-    dp = np.std(X, axis=1, keepdims=True)
-    X = (X - med) / dp
+    X = normalize(X, method)
 
     N = len(Y)
     C = np.max(Y)
@@ -333,7 +357,10 @@ def classificador_maxcorr(
 
 
 def classificador_dmc(
-    D: np.ndarray, Nr: int, Ptrain: int
+    D: np.ndarray,
+    Nr: int,
+    Ptrain: int,
+    method: NormalizationMethods = NormalizationMethods.Z_SCORE,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Distance to class mean (centroid) classifier.
@@ -345,9 +372,7 @@ def classificador_dmc(
     Nrep = Nr
     Ptrn = Ptrain / 100.0
 
-    med = np.mean(X, axis=1, keepdims=True)
-    dp = np.std(X, axis=1, keepdims=True)
-    X = (X - med) / dp
+    X = normalize(X, method)
 
     N = len(Y)
     C = np.max(Y)
