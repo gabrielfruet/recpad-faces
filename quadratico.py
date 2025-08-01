@@ -1,3 +1,4 @@
+from enum import Enum
 import numpy as np
 import logging
 from typing import List, Tuple
@@ -6,7 +7,17 @@ import time
 log = logging.getLogger(__name__)
 
 
-def estatisticas_classes(Xtrn, Ytrn, C):
+class QdaMethods(Enum):
+    FRIEDMAN = "friedman"
+    POOLED = "pooled"
+    DEFAULT = "default"
+    DIAGONAL = "diagonal"
+    TIKHONOV = "tikhonov"
+
+
+def estatisticas_classes(
+    Xtrn, Ytrn, C, method: QdaMethods = QdaMethods.DEFAULT, **kwargs
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     F = Xtrn.shape[1]  # Number of features
     M = np.zeros((C, F))
     S_k = np.zeros((C, F, F))
@@ -15,13 +26,39 @@ def estatisticas_classes(Xtrn, Ytrn, C):
         Ic = np.where(Ytrn == k)[0]
         Xc = Xtrn[Ic]
         mu_k = np.mean(Xc, axis=0)
-        cov_k = np.cov(Xc.T)
+        cov_k = np.cov(Xc, rowvar=False, bias=True)
+        if method is QdaMethods.TIKHONOV:
+            λ = kwargs["λ"]
+            cov_k += λ * np.eye(F)
+        elif method is QdaMethods.DIAGONAL:
+            cov_k = np.eye(F) * cov_k
+
         rank_k = np.linalg.matrix_rank(cov_k)
         M[k - 1] = mu_k
         S_k[k - 1] = cov_k
         posto_k[k - 1] = rank_k
 
-    return M, S_k, posto_k
+    priors_occur = np.array([(np.sum(Ytrn == k + 1) - 1) for k in range(C)])
+    f_wi = priors_occur / np.sum(priors_occur)
+
+    if method is QdaMethods.FRIEDMAN or method is QdaMethods.POOLED:
+        num_samples_train = len(Ytrn)
+        num_classes = C
+        priors_occur = priors_occur[..., np.newaxis, np.newaxis]
+        sum_scatter_matrix = np.sum(priors_occur * S_k, axis=0) / (num_samples_train)
+        C_pooled = sum_scatter_matrix / (num_samples_train)
+
+        if method is QdaMethods.FRIEDMAN:
+            λ = kwargs["λ"]
+            for k in range(C):
+                S_k[k] = ((1 - λ) * S_k[k] + λ * C_pooled) / (
+                    (1 - λ) * sum_scatter_matrix[k] + λ * len(Ytrn)
+                )
+        else:
+            for k in range(C):
+                S_k[k] = C_pooled
+
+    return M, S_k, posto_k, f_wi
 
 
 def discriminant(X, means, inv_covs, f_wi=None) -> np.ndarray:
@@ -59,7 +96,8 @@ def discriminant(X, means, inv_covs, f_wi=None) -> np.ndarray:
         # Compute Mahalanobis distance
         # (x-μ)ᵀΣ⁻¹(x-μ) for each sample
         mahal_term = np.einsum("ij,jk,ik->i", diff, inv_covs[k], diff)
-        distances[:, k] = mahal_term
+        _, logdet = np.linalg.slogdet(inv_covs[k])
+        distances[:, k] = mahal_term + 0.5 * logdet
         if f_wi is not None:
             distances[:, k] -= 2 * np.log(f_wi[k] + 1e-2)
 
@@ -67,7 +105,11 @@ def discriminant(X, means, inv_covs, f_wi=None) -> np.ndarray:
 
 
 def quadratico(
-    D: np.ndarray, Nr: int, Ptrain: int
+    D: np.ndarray,
+    Nr: int,
+    Ptrain: int,
+    λ: float = 0.01,
+    method: QdaMethods | str = QdaMethods.DEFAULT,
 ) -> Tuple[
     np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray
 ]:
@@ -82,14 +124,19 @@ def quadratico(
         S: List[List[np.ndarray]] -- List of class covariance matrices per repetition
         posto: List[List[int]] -- List of ranks of covariance matrices per repetition
     """
+
+    if isinstance(method, str):
+        method = QdaMethods(method.lower())
     X = D[:, :-1].copy()
     Y = D[:, -1].astype(int).copy()
     Nrep = Nr
     Ptrn = Ptrain / 100.0
 
+    log.info(f"Using method: {method}")
+
     # Z-score normalization
-    med = np.mean(X, axis=0, keepdims=True)
-    dp = np.std(X, axis=0, keepdims=True)
+    med = np.mean(X, axis=1, keepdims=True)
+    dp = np.std(X, axis=1, keepdims=True)
     X = (X - med) / dp
 
     N = len(Y)
@@ -117,7 +164,7 @@ def quadratico(
 
         # Centroids and covariance matrices per class
         tic = time.perf_counter_ns()
-        M, S_k, posto_k = estatisticas_classes(Xtrn, Ytrn, C)
+        M, S_k, posto_k, f_wi = estatisticas_classes(Xtrn, Ytrn, C, method=method, λ=λ)
         toc = time.perf_counter_ns()
         log.info(
             f"Time for calculating centroids and covariance matrices: {(toc - tic) / 1e6:.2f} ms"
@@ -126,11 +173,6 @@ def quadratico(
         m.append(M)
         S.append(S_k)
         posto.append(posto_k)
-
-        count_result = np.unique_counts(Ytrn)
-        sample_per_class = count_result.counts
-
-        fw_i = sample_per_class / (sample_per_class.sum() - 1)
 
         # Testing set
         Xtst = X_shuf[Ntrn:]
@@ -145,7 +187,11 @@ def quadratico(
         failed_inversions = 0
         for k in range(C):
             try:
+                # regularization
                 inv_covs[k] = np.linalg.inv(S_k[k])
+                log.debug(
+                    f"Max value of covariance matrix for class {k + 1}: {np.max(S_k[k])}"
+                )
             except np.linalg.LinAlgError:
                 failed_inversions += 1
                 log.debug(
@@ -156,7 +202,7 @@ def quadratico(
         log.info(f"Percentage of failed inversions: {100 * failed_inversions / C}%")
 
         # Calculate all distances at once
-        distances = discriminant(Xtst, M, inv_covs)
+        distances = discriminant(Xtst, M, inv_covs, f_wi)
 
         # Find predicted classes (add 1 because class indices start at 1)
         predicted_classes = np.argmin(distances, axis=1) + 1
@@ -177,4 +223,5 @@ def quadratico(
     S = np.array(S)
     posto = np.array(posto)
     P_failed_inversions = np.array(P_failed_inversions)
+    log.info(f"Posto: {posto}")
     return STATS, TX_OK, X, m, S, posto, P_failed_inversions

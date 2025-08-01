@@ -124,4 +124,5 @@ def variante2(
     S = np.array(S)
     posto = np.array(posto)
     P_failed_inversions = np.array(P_failed_inversions)
+    log.info(f"Posto: {posto}")
     return STATS, TX_OK, X, m, S, posto, P_failed_inversions

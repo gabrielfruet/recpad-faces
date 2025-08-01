@@ -29,6 +29,8 @@ import time
 from rich.console import Console
 from rich.table import Table
 from rich.logging import RichHandler
+from functools import partial
+from quadratico import quadratico
 
 # It's assumed that the classifier functions (quadratico, variante1, etc.)
 # are in separate .py files and return the described values.
@@ -80,13 +82,11 @@ def mock_linearMQ(D, Nr, Ptrain):
 # variante1 = mock_classifier
 # variante2 = mock_classifier
 # variante3 = mock_classifier
-variante4 = mock_classifier
 linearMQ = mock_linearMQ
-from quadratico import quadratico
-from variante1 import variante1
-from variante2 import variante2
-from variante3 import variante3
-from variante4 import variante4
+variante1 = partial(quadratico, method="tikhonov")
+variante2 = partial(quadratico, method="pooled")
+variante3 = partial(quadratico, method="friedman")
+variante4 = partial(quadratico, method="diagonal")
 # ... and so on
 # ----------------------------------------------------------------
 
@@ -124,107 +124,102 @@ def main():
     logging.basicConfig(
         level=args.level, handlers=[RichHandler()], format="%(message)s"
     )
-    try:
-        # Create a dummy 'recfaces.dat' if it doesn't exist for demonstration
-        if not args.data.exists():
-            log.error(f"File '{args.data}' not found")
-        D = np.loadtxt(args.data)
-        console.print("[green]Loaded 'recfaces.dat' successfully.[/green]")
+    # Create a dummy 'recfaces.dat' if it doesn't exist for demonstration
+    if not args.data.exists():
+        log.error(f"File '{args.data}' not found")
+    D = np.loadtxt(args.data)
+    console.print("[green]Loaded 'recfaces.dat' successfully.[/green]")
 
-        # --- 2. Set Parameters ---
-        # Nr = 50  # Number of repetitions
-        Nr = 5  # Use a smaller number for quick tests
-        Ptrain = 80  # Percentage for training
+    # --- 2. Set Parameters ---
+    # Nr = 50  # Number of repetitions
+    Nr = 50  # Use a smaller number for quick tests
+    Ptrain = 80  # Percentage for training
 
-        # --- 3. Run Classifiers and Collect Results ---
-        console.print(f"\nRunning {Nr} repetitions for each classifier...")
+    # --- 3. Run Classifiers and Collect Results ---
+    console.print(f"\nRunning {Nr} repetitions for each classifier...")
 
-        # A list to hold all results for easier processing
-        all_results = []
+    # A list to hold all results for easier processing
+    all_results = []
 
-        classifiers_to_run = {
-            "Quadrático": (quadratico, []),
-            "Variante 1": (variante1, [0.01]),
-            "Variante 2": (variante2, []),
-            "Variante 3": (variante3, [0.0]),
-            "Variante 4": (variante4, []),
-            "Linear MQ": (linearMQ, []),
-        }
+    classifiers_to_run = {
+        "Quadrático": (quadratico, []),
+        "Variante 1": (variante1, [0.01]),
+        "Variante 2": (variante2, []),
+        "Variante 3": (variante3, [0.0]),
+        "Variante 4": (variante4, []),
+        "Linear MQ": (linearMQ, []),
+    }
 
-        for name, (func, args) in classifiers_to_run.items():
-            start_time = time.perf_counter()
-            if name == "Linear MQ":
-                _, tx_ok, _ = func(D, Nr, Ptrain, *args)
-            else:
-                _, tx_ok, _, _, _, _, P_failed_inversions = func(D, Nr, Ptrain, *args)
-            end_time = time.perf_counter()
-            exec_time = end_time - start_time
-            all_results.append(
-                {
-                    "name": name,
-                    "tx_ok": tx_ok,
-                    "time": exec_time,
-                    "failed_inv": P_failed_inversions,
-                }
-            )
-            log.info(f"Classifier '{name}' executed in {exec_time:.4f} s")
-
-        # --- 4. Display Results in a Table ---
-        console.print("\n[bold cyan]Classifier Performance Summary[/bold cyan]")
-
-        table = Table(
-            show_header=True,
-            header_style="bold magenta",
-            title="Resultados dos Classificadores",
+    for name, (func, args) in classifiers_to_run.items():
+        start_time = time.perf_counter()
+        if name == "Linear MQ":
+            _, tx_ok, _ = func(D, Nr, Ptrain, *args)
+        else:
+            _, tx_ok, _, _, _, _, P_failed_inversions = func(D, Nr, Ptrain, *args)
+        end_time = time.perf_counter()
+        exec_time = end_time - start_time
+        all_results.append(
+            {
+                "name": name,
+                "tx_ok": tx_ok,
+                "time": exec_time,
+                "failed_inv": P_failed_inversions,
+            }
         )
-        table.add_column("Classificador", style="cyan", no_wrap=True)
-        table.add_column("Média", justify="right")
-        table.add_column("Mínimo", justify="right")
-        table.add_column("Máximo", justify="right")
-        table.add_column("Mediana", justify="right")
-        table.add_column("Desvio Padrão", justify="right", style="green")
-        table.add_column("Tempo (s)", justify="right", style="yellow")
-        table.add_column(
-            "Porcentagem de inversões que falharam", justify="right", style="red"
+        log.info(f"Classifier '{name}' executed in {exec_time:.4f} s")
+
+    # --- 4. Display Results in a Table ---
+    console.print("\n[bold cyan]Classifier Performance Summary[/bold cyan]")
+
+    table = Table(
+        show_header=True,
+        header_style="bold magenta",
+        title="Resultados dos Classificadores",
+    )
+    table.add_column("Classificador", style="cyan", no_wrap=True)
+    table.add_column("Média", justify="right")
+    table.add_column("Mínimo", justify="right")
+    table.add_column("Máximo", justify="right")
+    table.add_column("Mediana", justify="right")
+    table.add_column("Desvio Padrão", justify="right", style="green")
+    table.add_column("Tempo (s)", justify="right", style="yellow")
+    table.add_column(
+        "Porcentagem de inversões que falharam", justify="right", style="red"
+    )
+
+    for result in all_results:
+        stats = result["tx_ok"]
+        failed_inv = result.get("failed_inv", [])
+        table.add_row(
+            result["name"],
+            f"{np.mean(stats):.4f}",
+            f"{np.min(stats):.4f}",
+            f"{np.max(stats):.4f}",
+            f"{np.median(stats):.4f}",
+            f"{np.std(stats):.4f}",
+            f"{result['time']:.4f}",
+            f"{np.mean(failed_inv) if len(failed_inv) > 0 else 'N/A':.4f}",
         )
 
-        for result in all_results:
-            stats = result["tx_ok"]
-            failed_inv = result.get("failed_inv", [])
-            table.add_row(
-                result["name"],
-                f"{np.mean(stats):.4f}",
-                f"{np.min(stats):.4f}",
-                f"{np.max(stats):.4f}",
-                f"{np.median(stats):.4f}",
-                f"{np.std(stats):.4f}",
-                f"{result['time']:.4f}",
-                f"{np.mean(failed_inv) if len(failed_inv) > 0 else 'N/A':.4f}",
-            )
+    console.print(table)
 
-        console.print(table)
+    # --- 5. Generate Boxplot of Success Rates ---
+    console.print("\nGenerating boxplot...")
+    plt.style.use("seaborn-v0_8-whitegrid")
+    fig, ax = plt.subplots(figsize=(10, 6))
 
-        # --- 5. Generate Boxplot of Success Rates ---
-        console.print("\nGenerating boxplot...")
-        plt.style.use("seaborn-v0_8-whitegrid")
-        fig, ax = plt.subplots(figsize=(10, 6))
+    tx_ok_data = [res["tx_ok"] for res in all_results]
+    classifier_names = [res["name"] for res in all_results]
 
-        tx_ok_data = [res["tx_ok"] for res in all_results]
-        classifier_names = [res["name"] for res in all_results]
-
-        ax.boxplot(tx_ok_data)
-        ax.set_xticklabels(classifier_names, rotation=45, ha="right")
-        ax.set_title("Comparação das Taxas de Acerto dos Classificadores", fontsize=16)
-        ax.set_xlabel("Classificador", fontsize=12)
-        ax.set_ylabel("Taxa de Acerto (%)", fontsize=12)
-        ax.yaxis.grid(True)
-        plt.tight_layout()
-        plt.show()
-        console.print("[green]Done.[/green]")
-
-    except Exception as e:
-        console.print(f"[bold red]An error occurred: {e}[/bold red]")
-        raise Exception("Error") from e
+    ax.boxplot(tx_ok_data)
+    ax.set_xticklabels(classifier_names, rotation=45, ha="right")
+    ax.set_title("Comparação das Taxas de Acerto dos Classificadores", fontsize=16)
+    ax.set_xlabel("Classificador", fontsize=12)
+    ax.set_ylabel("Taxa de Acerto (%)", fontsize=12)
+    ax.yaxis.grid(True)
+    plt.tight_layout()
+    plt.show()
+    console.print("[green]Done.[/green]")
 
 
 if __name__ == "__main__":

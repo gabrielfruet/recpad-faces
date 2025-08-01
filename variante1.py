@@ -11,7 +11,8 @@ def variante1(
     D: np.ndarray,
     Nr: int,
     Ptrain: int,
-    λ: float,
+    λ: float = 0.01,
+    method: str = "default",
 ) -> Tuple[
     np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray
 ]:
@@ -61,7 +62,7 @@ def variante1(
 
         # Centroids and covariance matrices per class
         tic = time.perf_counter_ns()
-        M, S_k, posto_k = estatisticas_classes(Xtrn, Ytrn, C)
+        M, S_k, posto_k = estatisticas_classes(Xtrn, Ytrn, C, method=method, λ=λ)
         toc = time.perf_counter_ns()
         log.info(
             f"Time for calculating centroids and covariance matrices: {(toc - tic) / 1e6:.2f} ms"
@@ -120,4 +121,5 @@ def variante1(
     S = np.array(S)
     posto = np.array(posto)
     P_failed_inversions = np.array(P_failed_inversions)
+    log.info(f"Posto: {posto}")
     return STATS, TX_OK, X, m, S, posto, P_failed_inversions
