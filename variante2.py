@@ -7,16 +7,15 @@ import logging
 log = logging.getLogger(__name__)
 
 
-def variante1(
+def variante2(
     D: np.ndarray,
     Nr: int,
     Ptrain: int,
-    λ: float,
 ) -> Tuple[
     np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray
 ]:
     """
-    Quadratico variante 1 classifier implementation in Python with optimized testing phase
+    Quadratico variante 2 classifier implementation in Python with optimized testing phase
     Classifier based on Mahalanobis distance to class centroids, using class-specific covariance matrices
     Returns:
         STATS: List[float] -- [mean, std, median, min, max] of accuracy over Nr repetitions
@@ -32,8 +31,8 @@ def variante1(
     Ptrn = Ptrain / 100.0
 
     # Z-score normalization
-    med = np.mean(X, axis=1, keepdims=True)
-    dp = np.std(X, axis=1, keepdims=True)
+    med = np.mean(X, axis=0, keepdims=True)
+    dp = np.std(X, axis=0, keepdims=True)
     X = (X - med) / dp
 
     N = len(Y)
@@ -71,6 +70,13 @@ def variante1(
         S.append(S_k)
         posto.append(posto_k)
 
+        count_result = np.unique_counts(Ytrn)
+        sample_per_class = count_result.counts
+
+        fw_i = sample_per_class / (sample_per_class.sum() - 1)
+
+        C_pooled = np.sum(fw_i[:, np.newaxis, np.newaxis] * S_k, axis=0)
+
         # Testing set
         Xtst = X_shuf[Ntrn:]
         Ytst = Y_shuf[Ntrn:]
@@ -80,26 +86,24 @@ def variante1(
         tic = time.perf_counter_ns()
 
         # Pre-compute inverse covariance matrices
-        inv_covs = np.zeros_like(S_k)
         failed_inversions = 0
-        for k in range(C):
-            try:
-                # regularization
-                inv_covs[k] = np.linalg.inv(S_k[k] + λ * np.eye(S_k.shape[1]))
-                log.debug(
-                    f"Max value of covariance matrix for class {k + 1}: {np.max(S_k[k])}"
-                )
-            except np.linalg.LinAlgError:
-                failed_inversions += 1
-                log.debug(
-                    f"Covariance matrix for class {k + 1} is singular, using pseudo-inverse."
-                )
-                inv_covs[k] = np.linalg.pinv(S_k[k] + λ * np.eye(S_k.shape[1]))
+        try:
+            # regularization
+            inv_C_pooled = np.linalg.inv(C_pooled)
+            log.debug(
+                f"Max value of inverse pooled covariance matrix: {np.max(inv_C_pooled)}"
+            )
+        except np.linalg.LinAlgError:
+            failed_inversions += 1
+            log.debug(
+                f"Pooled covariance matrix inversion failed, using pseudo-inverse instead"
+            )
+            inv_C_pooled = np.linalg.pinv(C_pooled)
 
-        log.info(f"Percentage of failed inversions: {100 * failed_inversions / C}%")
+        log.info(f"Percentage of failed inversions: {100 * failed_inversions}%")
 
         # Calculate all distances at once
-        distances = discriminant(Xtst, M, inv_covs)
+        distances = discriminant(Xtst, M, [inv_C_pooled] * C)
 
         # Find predicted classes (add 1 because class indices start at 1)
         predicted_classes = np.argmin(distances, axis=1) + 1

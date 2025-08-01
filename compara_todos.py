@@ -20,12 +20,15 @@ To run this, you will need to install the 'rich' library:
 pip install rich
 """
 
+import argparse
+from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 import logging
 import time
 from rich.console import Console
 from rich.table import Table
+from rich.logging import RichHandler
 
 # It's assumed that the classifier functions (quadratico, variante1, etc.)
 # are in separate .py files and return the described values.
@@ -51,8 +54,11 @@ def mock_classifier(D, Nr, Ptrain, *args):
     x = np.array([])
     m = np.array([])
     s = np.array([])
+    P_failed_inversions = np.random.uniform(
+        0.01, 0.1, size=Nr
+    )  # Mock failed inversions
     posto = 0
-    return stats, tx_ok, x, m, s, posto
+    return stats, tx_ok, x, m, s, posto, P_failed_inversions
 
 
 def mock_linearMQ(D, Nr, Ptrain):
@@ -72,12 +78,15 @@ def mock_linearMQ(D, Nr, Ptrain):
 # --- Replace these imports with your actual classifier modules ---
 # quadratico = mock_classifier
 # variante1 = mock_classifier
-variante2 = mock_classifier
-variante3 = mock_classifier
+# variante2 = mock_classifier
+# variante3 = mock_classifier
 variante4 = mock_classifier
 linearMQ = mock_linearMQ
 from quadratico import quadratico
 from variante1 import variante1
+from variante2 import variante2
+from variante3 import variante3
+from variante4 import variante4
 # ... and so on
 # ----------------------------------------------------------------
 
@@ -91,23 +100,36 @@ def main():
     # Initialize Rich Console for beautiful printing
     console = Console()
 
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument(
+        "--level",
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        type=str.upper,
+        help="Set logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+    )
+
+    parser.add_argument(
+        "--data",
+        "-d",
+        default="recfaces.dat",
+        type=Path,
+        help="Path to the dataset file (default: recfaces.dat)",
+    )
+
+    args = parser.parse_args()
+
     # --- 1. Load Data ---
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(
+        level=args.level, handlers=[RichHandler()], format="%(message)s"
+    )
     try:
         # Create a dummy 'recfaces.dat' if it doesn't exist for demonstration
-        try:
-            D = np.loadtxt("recfaces.dat")
-            console.print("[green]Loaded 'recfaces.dat' successfully.[/green]")
-        except FileNotFoundError:
-            console.print(
-                "[yellow]Warning: 'recfaces.dat' not found. Creating a dummy file.[/yellow]"
-            )
-            # Creating a dummy dataset: 40 classes, 10 samples each, 100 features
-            dummy_data = np.random.rand(400, 101)
-            for i in range(40):
-                dummy_data[i * 10 : (i + 1) * 10, -1] = i + 1
-            np.savetxt("recfaces.dat", dummy_data)
-            D = np.loadtxt("recfaces.dat")
+        if not args.data.exists():
+            log.error(f"File '{args.data}' not found")
+        D = np.loadtxt(args.data)
+        console.print("[green]Loaded 'recfaces.dat' successfully.[/green]")
 
         # --- 2. Set Parameters ---
         # Nr = 50  # Number of repetitions
@@ -124,7 +146,7 @@ def main():
             "Quadrático": (quadratico, []),
             "Variante 1": (variante1, [0.01]),
             "Variante 2": (variante2, []),
-            "Variante 3": (variante3, [0.5]),
+            "Variante 3": (variante3, [0.0]),
             "Variante 4": (variante4, []),
             "Linear MQ": (linearMQ, []),
         }
@@ -134,10 +156,17 @@ def main():
             if name == "Linear MQ":
                 _, tx_ok, _ = func(D, Nr, Ptrain, *args)
             else:
-                _, tx_ok, _, _, _, _ = func(D, Nr, Ptrain, *args)
+                _, tx_ok, _, _, _, _, P_failed_inversions = func(D, Nr, Ptrain, *args)
             end_time = time.perf_counter()
             exec_time = end_time - start_time
-            all_results.append({"name": name, "tx_ok": tx_ok, "time": exec_time})
+            all_results.append(
+                {
+                    "name": name,
+                    "tx_ok": tx_ok,
+                    "time": exec_time,
+                    "failed_inv": P_failed_inversions,
+                }
+            )
             log.info(f"Classifier '{name}' executed in {exec_time:.4f} s")
 
         # --- 4. Display Results in a Table ---
@@ -155,9 +184,13 @@ def main():
         table.add_column("Mediana", justify="right")
         table.add_column("Desvio Padrão", justify="right", style="green")
         table.add_column("Tempo (s)", justify="right", style="yellow")
+        table.add_column(
+            "Porcentagem de inversões que falharam", justify="right", style="red"
+        )
 
         for result in all_results:
             stats = result["tx_ok"]
+            failed_inv = result.get("failed_inv", [])
             table.add_row(
                 result["name"],
                 f"{np.mean(stats):.4f}",
@@ -166,6 +199,7 @@ def main():
                 f"{np.median(stats):.4f}",
                 f"{np.std(stats):.4f}",
                 f"{result['time']:.4f}",
+                f"{np.mean(failed_inv) if len(failed_inv) > 0 else 'N/A':.4f}",
             )
 
         console.print(table)
@@ -190,6 +224,7 @@ def main():
 
     except Exception as e:
         console.print(f"[bold red]An error occurred: {e}[/bold red]")
+        raise Exception("Error") from e
 
 
 if __name__ == "__main__":

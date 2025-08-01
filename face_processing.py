@@ -122,7 +122,7 @@ Z = np.vstack([X, Y])
 Z = Z.T  # Each row: attributes + label
 
 # Save to ASCII file ("recfaces.dat")
-np.savetxt("recfaces.dat", Z, fmt="%.6f")
+np.savetxt(output_file, Z, fmt="%.6f")
 
 # Optionally, save X and Y separately as in original commented code
 # np.savetxt("yale1_input20x20.txt", X, fmt='%.6f')

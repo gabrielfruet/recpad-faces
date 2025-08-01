@@ -7,11 +7,10 @@ import logging
 log = logging.getLogger(__name__)
 
 
-def variante1(
+def variante4(
     D: np.ndarray,
     Nr: int,
     Ptrain: int,
-    λ: float,
 ) -> Tuple[
     np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray
 ]:
@@ -67,6 +66,9 @@ def variante1(
             f"Time for calculating centroids and covariance matrices: {(toc - tic) / 1e6:.2f} ms"
         )
 
+        mask_as_diag = np.eye(S_k.shape[1])[np.newaxis]
+        S_k = S_k * mask_as_diag  # Ensure covariance matrices are diagonal
+
         m.append(M)
         S.append(S_k)
         posto.append(posto_k)
@@ -85,7 +87,7 @@ def variante1(
         for k in range(C):
             try:
                 # regularization
-                inv_covs[k] = np.linalg.inv(S_k[k] + λ * np.eye(S_k.shape[1]))
+                inv_covs[k] = np.linalg.inv(S_k[k])
                 log.debug(
                     f"Max value of covariance matrix for class {k + 1}: {np.max(S_k[k])}"
                 )
@@ -94,7 +96,7 @@ def variante1(
                 log.debug(
                     f"Covariance matrix for class {k + 1} is singular, using pseudo-inverse."
                 )
-                inv_covs[k] = np.linalg.pinv(S_k[k] + λ * np.eye(S_k.shape[1]))
+                inv_covs[k] = np.linalg.pinv(S_k[k])
 
         log.info(f"Percentage of failed inversions: {100 * failed_inversions / C}%")
 

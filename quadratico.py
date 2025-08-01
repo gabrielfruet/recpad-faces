@@ -24,7 +24,7 @@ def estatisticas_classes(Xtrn, Ytrn, C):
     return M, S_k, posto_k
 
 
-def mahalanobis_distance(X, means, inv_covs) -> np.ndarray:
+def discriminant(X, means, inv_covs, f_wi=None) -> np.ndarray:
     """
     Vectorized Mahalanobis distance calculation for multiple samples and classes
 
@@ -36,6 +36,8 @@ def mahalanobis_distance(X, means, inv_covs) -> np.ndarray:
         Class centroids
     inv_covs : numpy.ndarray, shape (n_classes, n_features, n_features)
         Inverse covariance matrices for each class
+    f_wi: numpy.ndarray, optional, shape (n_classes,)
+        Frequency of each class
 
     Returns:
     --------
@@ -57,14 +59,18 @@ def mahalanobis_distance(X, means, inv_covs) -> np.ndarray:
         # Compute Mahalanobis distance
         # (x-μ)ᵀΣ⁻¹(x-μ) for each sample
         mahal_term = np.einsum("ij,jk,ik->i", diff, inv_covs[k], diff)
-        distances[:, k] = np.sqrt(mahal_term)
+        distances[:, k] = mahal_term
+        if f_wi is not None:
+            distances[:, k] -= 2 * np.log(f_wi[k] + 1e-2)
 
     return distances
 
 
 def quadratico(
     D: np.ndarray, Nr: int, Ptrain: int
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> Tuple[
+    np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray
+]:
     """
     Quadratico classifier implementation in Python with optimized testing phase
     Classifier based on Mahalanobis distance to class centroids, using class-specific covariance matrices
@@ -82,8 +88,8 @@ def quadratico(
     Ptrn = Ptrain / 100.0
 
     # Z-score normalization
-    med = np.mean(X, axis=1, keepdims=True)
-    dp = np.std(X, axis=1, keepdims=True)
+    med = np.mean(X, axis=0, keepdims=True)
+    dp = np.std(X, axis=0, keepdims=True)
     X = (X - med) / dp
 
     N = len(Y)
@@ -96,6 +102,7 @@ def quadratico(
     m = []
     S = []
     posto = []
+    P_failed_inversions = []
 
     for r in range(Nrep):
         log.info(f"Repetition {r + 1}/{Nrep}")
@@ -119,6 +126,11 @@ def quadratico(
         m.append(M)
         S.append(S_k)
         posto.append(posto_k)
+
+        count_result = np.unique_counts(Ytrn)
+        sample_per_class = count_result.counts
+
+        fw_i = sample_per_class / (sample_per_class.sum() - 1)
 
         # Testing set
         Xtst = X_shuf[Ntrn:]
@@ -144,7 +156,7 @@ def quadratico(
         log.info(f"Percentage of failed inversions: {100 * failed_inversions / C}%")
 
         # Calculate all distances at once
-        distances = mahalanobis_distance(Xtst, M, inv_covs)
+        distances = discriminant(Xtst, M, inv_covs)
 
         # Find predicted classes (add 1 because class indices start at 1)
         predicted_classes = np.argmin(distances, axis=1) + 1
@@ -155,6 +167,7 @@ def quadratico(
         toc = time.perf_counter_ns()
         log.info(f"Time for testing : {(toc - tic) / 1e6:.2f} ms")
         Pacerto.append(100 * acerto / Ntst)
+        P_failed_inversions.append(100 * failed_inversions / C)
 
     TX_OK = np.array(Pacerto)
     STATS = np.array(
@@ -163,4 +176,5 @@ def quadratico(
     m = np.array(m)
     S = np.array(S)
     posto = np.array(posto)
-    return STATS, TX_OK, X, m, S, posto
+    P_failed_inversions = np.array(P_failed_inversions)
+    return STATS, TX_OK, X, m, S, posto, P_failed_inversions

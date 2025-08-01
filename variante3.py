@@ -7,7 +7,7 @@ import logging
 log = logging.getLogger(__name__)
 
 
-def variante1(
+def variante3(
     D: np.ndarray,
     Nr: int,
     Ptrain: int,
@@ -32,8 +32,8 @@ def variante1(
     Ptrn = Ptrain / 100.0
 
     # Z-score normalization
-    med = np.mean(X, axis=1, keepdims=True)
-    dp = np.std(X, axis=1, keepdims=True)
+    med = np.mean(X, axis=0, keepdims=True)
+    dp = np.std(X, axis=0, keepdims=True)
     X = (X - med) / dp
 
     N = len(Y)
@@ -67,6 +67,13 @@ def variante1(
             f"Time for calculating centroids and covariance matrices: {(toc - tic) / 1e6:.2f} ms"
         )
 
+        num_samples_train = len(Ytrn)
+        num_classes = C
+        sum_scatter_matrix = np.sum(
+            [(np.sum(Ytrn == k + 1) - 1) * S_k[k] for k in range(C)], axis=0
+        )
+        C_pooled = sum_scatter_matrix / (num_samples_train - num_classes)
+
         m.append(M)
         S.append(S_k)
         posto.append(posto_k)
@@ -83,18 +90,18 @@ def variante1(
         inv_covs = np.zeros_like(S_k)
         failed_inversions = 0
         for k in range(C):
+            S_k_friedman = ((1 - λ) * S_k[k] + λ * C_pooled) / (
+                (1 - λ) * sum_scatter_matrix[k] + len(Ytrn)
+            )
             try:
                 # regularization
-                inv_covs[k] = np.linalg.inv(S_k[k] + λ * np.eye(S_k.shape[1]))
-                log.debug(
-                    f"Max value of covariance matrix for class {k + 1}: {np.max(S_k[k])}"
-                )
+                inv_covs[k] = np.linalg.inv(S_k_friedman)
             except np.linalg.LinAlgError:
                 failed_inversions += 1
                 log.debug(
                     f"Covariance matrix for class {k + 1} is singular, using pseudo-inverse."
                 )
-                inv_covs[k] = np.linalg.pinv(S_k[k] + λ * np.eye(S_k.shape[1]))
+                inv_covs[k] = np.linalg.pinv(S_k_friedman)
 
         log.info(f"Percentage of failed inversions: {100 * failed_inversions / C}%")
 
