@@ -7,10 +7,13 @@ requires-python = ">=3.10"
 dependencies = [
     "matplotlib>=2.2.5",
     "numpy>=1.12.1",
-    "opencv-python>=4.2.0.34",
+    "opencv-python-headless>=4.11.0.86",
     "pillow>=4.3.0",
+    "pyqt5>=5.15.11",
     "rich>=14.1.0",
+    "scikit-learn>=1.7.1",
     "scipy>=0.19.1",
+    "tk>=0.1.0",
 ]
 
 [dependency-groups]

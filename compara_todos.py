@@ -21,6 +21,7 @@ pip install rich
 """
 
 import argparse
+import csv
 from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
@@ -30,7 +31,12 @@ from rich.console import Console
 from rich.table import Table
 from rich.logging import RichHandler
 from functools import partial
-from quadratico import quadratico
+from quadratico import (
+    quadratico,
+    classificador_1nn,
+    classificador_dmc,
+    classificador_maxcorr,
+)
 
 # It's assumed that the classifier functions (quadratico, variante1, etc.)
 # are in separate .py files and return the described values.
@@ -77,18 +83,11 @@ def mock_linearMQ(D, Nr, Ptrain):
     return stats, tx_ok, w
 
 
-# --- Replace these imports with your actual classifier modules ---
-# quadratico = mock_classifier
-# variante1 = mock_classifier
-# variante2 = mock_classifier
-# variante3 = mock_classifier
 linearMQ = mock_linearMQ
 variante1 = partial(quadratico, method="tikhonov")
 variante2 = partial(quadratico, method="pooled")
 variante3 = partial(quadratico, method="friedman")
 variante4 = partial(quadratico, method="diagonal")
-# ... and so on
-# ----------------------------------------------------------------
 
 log = logging.getLogger(__name__)
 
@@ -118,6 +117,14 @@ def main():
         help="Path to the dataset file (default: recfaces.dat)",
     )
 
+    parser.add_argument(
+        "--experiment",
+        "-e",
+        required=True,
+        type=str,
+        help="Name of the experiment (used for CSV export)",
+    )
+
     args = parser.parse_args()
 
     # --- 1. Load Data ---
@@ -132,7 +139,7 @@ def main():
 
     # --- 2. Set Parameters ---
     # Nr = 50  # Number of repetitions
-    Nr = 50  # Use a smaller number for quick tests
+    Nr = 5  # Use a smaller number for quick tests
     Ptrain = 80  # Percentage for training
 
     # --- 3. Run Classifiers and Collect Results ---
@@ -145,17 +152,21 @@ def main():
         "Quadrático": (quadratico, []),
         "Variante 1": (variante1, [0.01]),
         "Variante 2": (variante2, []),
-        "Variante 3": (variante3, [0.0]),
+        "Variante 3": (variante3, [0.5]),
         "Variante 4": (variante4, []),
-        "Linear MQ": (linearMQ, []),
+        "DMC": (classificador_dmc, []),
+        "1NN": (classificador_1nn, []),
+        "Máxima Correlação": (classificador_maxcorr, []),
     }
 
     for name, (func, args) in classifiers_to_run.items():
         start_time = time.perf_counter()
-        if name == "Linear MQ":
-            _, tx_ok, _ = func(D, Nr, Ptrain, *args)
-        else:
-            _, tx_ok, _, _, _, _, P_failed_inversions = func(D, Nr, Ptrain, *args)
+        result = func(D, Nr, Ptrain, *args)
+        P_failed_inversions = None
+        try:
+            _, tx_ok, _, _, _, _, P_failed_inversions = result
+        except ValueError:
+            _, tx_ok, _ = result
         end_time = time.perf_counter()
         exec_time = end_time - start_time
         all_results.append(
@@ -163,7 +174,9 @@ def main():
                 "name": name,
                 "tx_ok": tx_ok,
                 "time": exec_time,
-                "failed_inv": P_failed_inversions,
+                "failed_inv": P_failed_inversions
+                if "P_failed_inversions" in locals()
+                else [],
             }
         )
         log.info(f"Classifier '{name}' executed in {exec_time:.4f} s")
@@ -202,6 +215,38 @@ def main():
         )
 
     console.print(table)
+
+    csv_filename = f"{args.experiment}.csv"
+    with open(csv_filename, "w", newline="") as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(
+            [
+                "Classificador",
+                "Media",
+                "Minimo",
+                "Maximo",
+                "Mediana",
+                "Desvio Padrão",
+                "Tempo (s)",
+                "Pct inv falhou",
+            ]
+        )
+        for result in all_results:
+            stats = result["tx_ok"]
+            failed_inv = result.get("failed_inv", [])
+            writer.writerow(
+                [
+                    result["name"],
+                    f"{np.mean(stats):.4f}",
+                    f"{np.min(stats):.4f}",
+                    f"{np.max(stats):.4f}",
+                    f"{np.median(stats):.4f}",
+                    f"{np.std(stats):.4f}",
+                    f"{result['time']:.4f}",
+                    f"{np.mean(failed_inv) if len(failed_inv) > 0 else 'N/A':.4f}",
+                ]
+            )
+    console.print(f"[green]Results exported to {csv_filename}[/green]")
 
     # --- 5. Generate Boxplot of Success Rates ---
     console.print("\nGenerating boxplot...")

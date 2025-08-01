@@ -7,6 +7,7 @@ Author: Guilherme Barreto (Python conversion by GitHub Copilot)
 """
 
 from pathlib import Path
+
 from PIL import Image
 import numpy as np
 import cv2
@@ -32,6 +33,22 @@ parser.add_argument(
     default=30,
     help="Resize images to this dimension (default: 30x30)",
 )
+
+parser.add_argument(
+    "-pca",
+    nargs="?",
+    const=0.98,
+    type=float,
+    default=None,
+    help="Apply PCA to reduce dimensionality (not implemented in this script)",
+)
+
+parser.add_argument(
+    "--box_cox",
+    action="store_true",
+    help="Apply Box-Cox transformation (not implemented in this script)",
+)
+
 
 args = parser.parse_args()
 
@@ -110,12 +127,44 @@ for i in range(1, Nind + 1):  # Index for individuals
 X = np.array(X).T  # Each image is a column in X
 Y = np.array(Y).reshape(1, -1)  # Y is a row vector
 
-# Optional: PCA (commented out, as in the original)
-# from sklearn.decomposition import PCA
-# q = 25
-# pca = PCA(n_components=q)
-# X_pca = pca.fit_transform(X.T).T  # X.T: shape (n_samples, n_features)
-# X = X_pca
+
+def box_cox(data, λ):
+    return np.where(data > 0, (data**λ - 1) / λ, 0)
+
+
+def log_likelihood(X, μ, σ):
+    return -0.5 * np.sum(np.log(2 * np.pi * σ**2) + ((X - μ) ** 2) / (2 * σ**2))
+
+
+if args.box_cox:
+    from scipy.stats import boxcox
+
+    X = X.clip(min=1e-4)  # Avoid log(0) issues
+
+    for f in range(X.shape[0]):
+        bc_result = boxcox(X[f], lmbda=None)
+        assert len(bc_result) == 2, (
+            "Box-Cox transformation failed, expected two outputs."
+        )
+        Xf = bc_result[0]
+        assert isinstance(X, np.ndarray), (
+            "Box-Cox transformation output is not a numpy array."
+        )
+        X[f] = Xf
+
+
+if args.pca:
+    # Optional: PCA (commented out, as in the original)
+    from sklearn.decomposition import PCA
+
+    Xc = X - np.mean(X, axis=1, keepdims=True)  # Center the data
+    u, s, vh = np.linalg.svd(Xc.T)
+    explained_variance_ratio = s**2 / np.sum(s**2)
+    # trick: to find the number of components that explain 98% of variance
+    q = (np.cumsum(explained_variance_ratio) > args.pca).argmax()
+    X = vh @ Xc
+    X = X[:q, :]  # Keep only the first q components
+
 
 # Combine X and Y: one attribute vector per row, label in last column
 Z = np.vstack([X, Y])

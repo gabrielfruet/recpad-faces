@@ -225,3 +225,162 @@ def quadratico(
     P_failed_inversions = np.array(P_failed_inversions)
     log.info(f"Posto: {posto}")
     return STATS, TX_OK, X, m, S, posto, P_failed_inversions
+
+
+def classificador_1nn(
+    D: np.ndarray, Nr: int, Ptrain: int
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    1-Nearest Neighbor classifier.
+    Returns: (stats, accuracies, Xnorm)
+    """
+    X = D[:, :-1].copy()
+    Y = D[:, -1].astype(int).copy()
+    Nrep = Nr
+    Ptrn = Ptrain / 100.0
+
+    # Z-score normalization
+    med = np.mean(X, axis=1, keepdims=True)
+    dp = np.std(X, axis=1, keepdims=True)
+    X = (X - med) / dp
+
+    N = len(Y)
+    Ntrn = int(np.floor(Ptrn * N))
+
+    Pacerto = []
+
+    for r in range(Nrep):
+        idx = np.random.permutation(N)
+        X_shuf = X[idx]
+        Y_shuf = Y[idx]
+
+        Xtrn = X_shuf[:Ntrn]
+        Ytrn = Y_shuf[:Ntrn]
+        Xtst = X_shuf[Ntrn:]
+        Ytst = Y_shuf[Ntrn:]
+        Ntst = Xtst.shape[0]
+
+        # Compute distances from each test sample to all train samples
+        dists = np.linalg.norm(Xtst[:, None, :] - Xtrn[None, :, :], axis=2)
+        nn_indices = np.argmin(dists, axis=1)
+        predicted_classes = Ytrn[nn_indices]
+        acerto = np.sum(predicted_classes == Ytst)
+        Pacerto.append(100 * acerto / Ntst)
+
+    TX_OK = np.array(Pacerto)
+    STATS = np.array(
+        [np.mean(TX_OK), np.std(TX_OK), np.median(TX_OK), np.min(TX_OK), np.max(TX_OK)]
+    )
+    return STATS, TX_OK, X
+
+
+def classificador_maxcorr(
+    D: np.ndarray, Nr: int, Ptrain: int
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Maximum correlation classifier.
+    Assigns each sample to the class whose centroid has the highest Pearson correlation coefficient.
+    Returns: (stats, accuracies, Xnorm)
+    """
+    X = D[:, :-1].copy()
+    Y = D[:, -1].astype(int).copy()
+    Nrep = Nr
+    Ptrn = Ptrain / 100.0
+
+    med = np.mean(X, axis=1, keepdims=True)
+    dp = np.std(X, axis=1, keepdims=True)
+    X = (X - med) / dp
+
+    N = len(Y)
+    C = np.max(Y)
+    Ntrn = int(np.floor(Ptrn * N))
+
+    Pacerto = []
+
+    for r in range(Nrep):
+        idx = np.random.permutation(N)
+        X_shuf = X[idx]
+        Y_shuf = Y[idx]
+
+        Xtrn = X_shuf[:Ntrn]
+        Ytrn = Y_shuf[:Ntrn]
+        Xtst = X_shuf[Ntrn:]
+        Ytst = Y_shuf[Ntrn:]
+        Ntst = Xtst.shape[0]
+
+        # Class centroids
+        M = np.zeros((C, X.shape[1]))
+        for k in range(1, C + 1):
+            Ic = np.where(Ytrn == k)[0]
+            Xc = Xtrn[Ic]
+            M[k - 1] = np.mean(Xc, axis=0)
+
+        # Pearson correlation for each sample to each class centroid
+        Xc = Xtst - Xtst.mean(axis=1, keepdims=True)
+        Mc = M - M.mean(axis=1, keepdims=True)
+        numer = np.dot(Xc, Mc.T)
+        denom = np.linalg.norm(Xc, axis=1, keepdims=True) * np.linalg.norm(Mc, axis=1)
+        corr = numer / (denom + 1e-12)
+        predicted_classes = np.argmax(corr, axis=1) + 1
+        acerto = np.sum(predicted_classes == Ytst)
+        Pacerto.append(100 * acerto / Ntst)
+
+    TX_OK = np.array(Pacerto)
+    STATS = np.array(
+        [np.mean(TX_OK), np.std(TX_OK), np.median(TX_OK), np.min(TX_OK), np.max(TX_OK)]
+    )
+    return STATS, TX_OK, X
+
+
+def classificador_dmc(
+    D: np.ndarray, Nr: int, Ptrain: int
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Distance to class mean (centroid) classifier.
+    Assigns each sample to the class whose centroid is closest in Euclidean distance.
+    Returns: (stats, accuracies, Xnorm)
+    """
+    X = D[:, :-1].copy()
+    Y = D[:, -1].astype(int).copy()
+    Nrep = Nr
+    Ptrn = Ptrain / 100.0
+
+    med = np.mean(X, axis=1, keepdims=True)
+    dp = np.std(X, axis=1, keepdims=True)
+    X = (X - med) / dp
+
+    N = len(Y)
+    C = np.max(Y)
+    Ntrn = int(np.floor(Ptrn * N))
+
+    Pacerto = []
+
+    for r in range(Nrep):
+        idx = np.random.permutation(N)
+        X_shuf = X[idx]
+        Y_shuf = Y[idx]
+
+        Xtrn = X_shuf[:Ntrn]
+        Ytrn = Y_shuf[:Ntrn]
+        Xtst = X_shuf[Ntrn:]
+        Ytst = Y_shuf[Ntrn:]
+        Ntst = Xtst.shape[0]
+
+        # Class centroids
+        M = np.zeros((C, X.shape[1]))
+        for k in range(1, C + 1):
+            Ic = np.where(Ytrn == k)[0]
+            Xc = Xtrn[Ic]
+            M[k - 1] = np.mean(Xc, axis=0)
+
+        # Compute distances to centroids
+        dists = np.linalg.norm(Xtst[:, None, :] - M[None, :, :], axis=2)
+        predicted_classes = np.argmin(dists, axis=1) + 1
+        acerto = np.sum(predicted_classes == Ytst)
+        Pacerto.append(100 * acerto / Ntst)
+
+    TX_OK = np.array(Pacerto)
+    STATS = np.array(
+        [np.mean(TX_OK), np.std(TX_OK), np.median(TX_OK), np.min(TX_OK), np.max(TX_OK)]
+    )
+    return STATS, TX_OK, X
