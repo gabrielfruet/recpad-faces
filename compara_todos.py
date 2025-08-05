@@ -121,7 +121,6 @@ def main():
     parser.add_argument(
         "--experiment",
         "-e",
-        required=True,
         type=str,
         help="Name of the experiment (used for CSV export)",
     )
@@ -176,7 +175,9 @@ def main():
 
     for name, (func, func_args) in classifiers_to_run.items():
         start_time = time.perf_counter()
-        result = func(D, Nr, Ptrain, *func_args)
+        result = func(
+            D, Nr, Ptrain, *func_args, normalization_method=args.normalization_method
+        )
         P_failed_inversions = None
         try:
             _, tx_ok, _, _, _, _, P_failed_inversions = result
@@ -231,37 +232,38 @@ def main():
 
     console.print(table)
 
-    csv_filename = f"results/{args.experiment}.csv"
-    with open(csv_filename, "w", newline="") as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow(
-            [
-                "Classificador",
-                "Media",
-                "Minimo",
-                "Maximo",
-                "Mediana",
-                "Desvio Padrão",
-                "Tempo (s)",
-                "Pct inv falhou",
-            ]
-        )
-        for result in all_results:
-            stats = result["tx_ok"]
-            failed_inv = result.get("failed_inv", [])
+    if args.experiment:
+        csv_filename = f"results/{args.experiment}.csv"
+        with open(csv_filename, "w", newline="") as csvfile:
+            writer = csv.writer(csvfile)
             writer.writerow(
                 [
-                    result["name"],
-                    f"{np.mean(stats):.4f}",
-                    f"{np.min(stats):.4f}",
-                    f"{np.max(stats):.4f}",
-                    f"{np.median(stats):.4f}",
-                    f"{np.std(stats):.4f}",
-                    f"{result['time']:.4f}",
-                    f"{np.mean(failed_inv) if failed_inv is not None and len(failed_inv) > 0 else 'N/A'}",
+                    "Classificador",
+                    "Media",
+                    "Minimo",
+                    "Maximo",
+                    "Mediana",
+                    "Desvio Padrão",
+                    "Tempo (s)",
+                    "Pct inv falhou",
                 ]
             )
-    console.print(f"[green]Results exported to {csv_filename}[/green]")
+            for result in all_results:
+                stats = result["tx_ok"]
+                failed_inv = result.get("failed_inv", [])
+                writer.writerow(
+                    [
+                        result["name"],
+                        f"{np.mean(stats):.4f}",
+                        f"{np.min(stats):.4f}",
+                        f"{np.max(stats):.4f}",
+                        f"{np.median(stats):.4f}",
+                        f"{np.std(stats):.4f}",
+                        f"{result['time']:.4f}",
+                        f"{np.mean(failed_inv) if failed_inv is not None and len(failed_inv) > 0 else 'N/A'}",
+                    ]
+                )
+        console.print(f"[green]Results exported to {csv_filename}[/green]")
 
     # --- 5. Generate Boxplot of Success Rates ---
     # console.print("\nGenerating boxplot...")

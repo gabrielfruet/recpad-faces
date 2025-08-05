@@ -25,8 +25,8 @@ def normalize(
     X: np.ndarray, method: NormalizationMethods = NormalizationMethods.Z_SCORE
 ):
     if method is NormalizationMethods.Z_SCORE:
-        med = np.mean(X, axis=1, keepdims=True)
-        dp = np.std(X, axis=1, keepdims=True)
+        med = np.mean(X, axis=0, keepdims=True)
+        dp = np.std(X, axis=0, keepdims=True)
         X = (X - med) / dp
     elif method is NormalizationMethods.SCALE_CHANGE:
         X = (X - X.min()) / np.ptp(X)
@@ -60,7 +60,7 @@ def estatisticas_classes(
         S_k[k - 1] = cov_k
         posto_k[k - 1] = rank_k
 
-    priors_occur = np.array([(np.sum(Ytrn == k + 1) - 1) for k in range(C)])
+    priors_occur = np.array([np.sum(Ytrn == k + 1) for k in range(C)])
     f_wi = priors_occur / np.sum(priors_occur)
 
     if method is QdaMethods.FRIEDMAN or method is QdaMethods.POOLED:
@@ -74,7 +74,7 @@ def estatisticas_classes(
             λ = kwargs["λ"]
             for k in range(C):
                 S_k[k] = ((1 - λ) * S_k[k] + λ * C_pooled) / (
-                    (1 - λ) * sum_scatter_matrix[k] + λ * len(Ytrn)
+                    (1 - λ) * priors_occur[k] + λ * len(Ytrn)
                 )
         else:
             for k in range(C):
@@ -119,7 +119,7 @@ def discriminant(X, means, inv_covs, f_wi=None) -> np.ndarray:
         # (x-μ)ᵀΣ⁻¹(x-μ) for each sample
         mahal_term = np.einsum("ij,jk,ik->i", diff, inv_covs[k], diff)
         _, logdet = np.linalg.slogdet(inv_covs[k])
-        distances[:, k] = mahal_term + 0.5 * logdet
+        distances[:, k] = mahal_term - 0.5 * logdet
         if f_wi is not None:
             distances[:, k] -= 2 * np.log(f_wi[k] + 1e-2)
 
@@ -132,6 +132,7 @@ def quadratico(
     Ptrain: int,
     λ: float = 0.01,
     method: QdaMethods | str = QdaMethods.DEFAULT,
+    normalization_method=NormalizationMethods.NO_NORMALIZATION,
 ) -> Tuple[
     np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray
 ]:
@@ -157,9 +158,7 @@ def quadratico(
     log.info(f"Using method: {method}")
 
     # Z-score normalization
-    med = np.mean(X, axis=1, keepdims=True)
-    dp = np.std(X, axis=1, keepdims=True)
-    X = (X - med) / dp
+    X = normalize(X, normalization_method)
 
     N = len(Y)
     Nc = X.shape[0]
@@ -253,7 +252,7 @@ def classificador_1nn(
     D: np.ndarray,
     Nr: int,
     Ptrain: int,
-    method: NormalizationMethods = NormalizationMethods.Z_SCORE,
+    normalization_method: NormalizationMethods = NormalizationMethods.Z_SCORE,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     1-Nearest Neighbor classifier.
@@ -265,7 +264,7 @@ def classificador_1nn(
     Ptrn = Ptrain / 100.0
 
     # Z-score normalization
-    X = normalize(X, method)
+    X = normalize(X, normalization_method)
 
     N = len(Y)
     Ntrn = int(np.floor(Ptrn * N))
@@ -301,7 +300,7 @@ def classificador_maxcorr(
     D: np.ndarray,
     Nr: int,
     Ptrain: int,
-    method: NormalizationMethods = NormalizationMethods.Z_SCORE,
+    normalization_method: NormalizationMethods = NormalizationMethods.Z_SCORE,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Maximum correlation classifier.
@@ -313,7 +312,7 @@ def classificador_maxcorr(
     Nrep = Nr
     Ptrn = Ptrain / 100.0
 
-    X = normalize(X, method)
+    X = normalize(X, normalization_method)
 
     N = len(Y)
     C = np.max(Y)
@@ -340,8 +339,8 @@ def classificador_maxcorr(
             M[k - 1] = np.mean(Xc, axis=0)
 
         # Pearson correlation for each sample to each class centroid
-        Xc = Xtst - Xtst.mean(axis=1, keepdims=True)
-        Mc = M - M.mean(axis=1, keepdims=True)
+        Xc = Xtst - Xtst.mean(axis=0, keepdims=True)
+        Mc = M - M.mean(axis=0, keepdims=True)
         numer = np.dot(Xc, Mc.T)
         denom = np.linalg.norm(Xc, axis=1, keepdims=True) * np.linalg.norm(Mc, axis=1)
         corr = numer / (denom + 1e-12)
@@ -360,7 +359,7 @@ def classificador_dmc(
     D: np.ndarray,
     Nr: int,
     Ptrain: int,
-    method: NormalizationMethods = NormalizationMethods.Z_SCORE,
+    normalization_method: NormalizationMethods = NormalizationMethods.Z_SCORE,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Distance to class mean (centroid) classifier.
@@ -372,7 +371,7 @@ def classificador_dmc(
     Nrep = Nr
     Ptrn = Ptrain / 100.0
 
-    X = normalize(X, method)
+    X = normalize(X, normalization_method)
 
     N = len(Y)
     C = np.max(Y)
